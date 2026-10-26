@@ -1,3 +1,6 @@
+// Preserve the existing widget filename required by the feature spec.
+// ignore_for_file: file_names
+
 import 'package:flutter/material.dart';
 
 class TextBox extends StatelessWidget {
@@ -7,21 +10,27 @@ class TextBox extends StatelessWidget {
   final TextInputType? keyboardType;
   final String? Function(String?)? validator;
 
-  const TextBox({super.key, this.hintText, this.controller, this.obscureText=false, this.keyboardType, this.validator});
+  const TextBox({
+    super.key,
+    this.hintText,
+    this.controller,
+    this.obscureText = false,
+    this.keyboardType,
+    this.validator,
+  });
 
   @override
   Widget build(BuildContext context) {
     return TextFormField(
-        controller: controller,
-        obscureText: obscureText,
-        validator: validator,
-        decoration: InputDecoration(
-          hintText: hintText,
-          fillColor: Colors.white,
-          filled: true,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(50),
-          )
+      controller: controller,
+      obscureText: obscureText,
+      keyboardType: keyboardType,
+      validator: validator,
+      decoration: InputDecoration(
+        hintText: hintText,
+        fillColor: Colors.white,
+        filled: true,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(50)),
       ),
     );
   }

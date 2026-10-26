@@ -1,0 +1,262 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:livemeet/models/meeting.dart';
+import 'package:livemeet/screens/main_screen.dart';
+import 'package:livemeet/services/meeting_service.dart';
+import 'package:livemeet/utils/time_utils.dart';
+import 'package:livemeet/widgets/CustomText.dart';
+import 'package:livemeet/widgets/Button.dart';
+import 'package:livemeet/widgets/MeetingCard.dart';
+import 'package:livemeet/widgets/confirm_dialog.dart';
+import 'package:livemeet/widgets/filter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+enum _MeetingAction { start, pauseResume, end }
+
+class MeetingsScreen extends StatefulWidget {
+  final void Function(int) onNavigate;
+  final ValueChanged<bool> onBusyChanged;
+
+  const MeetingsScreen({
+    super.key,
+    required this.onNavigate,
+    required this.onBusyChanged,
+  });
+
+  @override
+  State<MeetingsScreen> createState() => _MeetingsScreenState();
+}
+
+class _MeetingsScreenState extends State<MeetingsScreen> {
+  List<Meeting> meetings = [];
+  int tab = 0;
+  bool isLoading = false;
+  bool busy = false;
+  String errorMessage = '';
+  late final Timer ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    loadMeetings();
+    ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && meetings.any((meeting) => meeting.status == 'running')) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    ticker.cancel();
+    super.dispose();
+  }
+
+  Future<void> loadMeetings() async {
+    setState(() {
+      isLoading = true;
+      errorMessage = '';
+    });
+    try {
+      await syncServerClock();
+      if (!mounted) return;
+      final loaded = await MeetingService.fetchMeetings();
+      if (!mounted) return;
+      setState(() => meetings = loaded);
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+      setState(() => errorMessage = e.message);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => errorMessage = 'Unable to load meetings: $e');
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> refreshMeetings() async {
+    if (busy || isLoading) return;
+    await loadMeetings();
+  }
+
+  Future<void> act(Meeting meeting, _MeetingAction action) async {
+    if (busy || isLoading || errorMessage.isNotEmpty) return;
+    if (meetings.any((m) => m.isActive && m.id != meeting.id)) return;
+    if (action == _MeetingAction.start
+        ? meeting.status != 'upcoming'
+        : !meeting.isActive) {
+      return;
+    }
+    setState(() => busy = true);
+    try {
+      if (action != _MeetingAction.pauseResume) {
+        final confirmed = await showConfirmDialog(
+          context,
+          title: action == _MeetingAction.start
+              ? 'Start meeting?'
+              : 'End meeting?',
+          message: action == _MeetingAction.start
+              ? '${meeting.title}\n${formatDate(meeting.meetingDate)}'
+              : 'The running group will be finished and groups that were not held will be marked as skipped.',
+        );
+        if (!mounted) return;
+        if (!confirmed) return;
+      }
+      widget.onBusyChanged(true);
+      switch (action) {
+        case _MeetingAction.start:
+          await MeetingService.startMeeting(meeting.id);
+        case _MeetingAction.pauseResume:
+          if (meeting.status == 'paused') {
+            await MeetingService.resumeMeeting(meeting.id);
+          } else {
+            await MeetingService.pauseMeeting(meeting.id);
+          }
+        case _MeetingAction.end:
+          await MeetingService.endMeeting(meeting.id);
+      }
+      if (!mounted) return;
+      await loadMeetings();
+      if (!mounted) return;
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+      await loadMeetings();
+      if (!mounted) return;
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Meeting action failed: $e')));
+      await loadMeetings();
+      if (!mounted) return;
+    } finally {
+      widget.onBusyChanged(false);
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  List<Meeting> get visibleMeetings {
+    final visible = meetings
+        .where(
+          (m) => tab == 0
+              ? m.status == 'upcoming' || m.isActive
+              : m.status == 'done',
+        )
+        .toList();
+    visible.sort((a, b) {
+      if (tab == 0 && a.isActive != b.isActive) return a.isActive ? -1 : 1;
+      final date = tab == 0
+          ? a.meetingDate.compareTo(b.meetingDate)
+          : b.meetingDate.compareTo(a.meetingDate);
+      return date != 0 ? date : a.id.compareTo(b.id);
+    });
+    return visible;
+  }
+
+  Widget meetingList() {
+    final visible = visibleMeetings;
+    final active = meetings.where((m) => m.isActive).firstOrNull;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return RefreshIndicator(
+          onRefresh: refreshMeetings,
+          child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            itemCount: isLoading || errorMessage.isNotEmpty || visible.isEmpty
+                ? 1
+                : visible.length,
+            itemBuilder: (context, index) {
+              if (isLoading || errorMessage.isNotEmpty || visible.isEmpty) {
+                return ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Center(
+                    child: isLoading
+                        ? const CircularProgressIndicator()
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CustomText(
+                                text: errorMessage.isNotEmpty
+                                    ? errorMessage
+                                    : tab == 0
+                                    ? 'No coming meetings. Import a schedule first.'
+                                    : 'No previous meetings yet.',
+                                textAlign: TextAlign.center,
+                                color: errorMessage.isNotEmpty
+                                    ? Colors.red
+                                    : null,
+                              ),
+                              if (errorMessage.isEmpty && tab == 0) ...[
+                                const SizedBox(height: 10),
+                                Button(
+                                  text: 'Go to Import',
+                                  onTap: () => widget.onNavigate(kImport),
+                                ),
+                              ],
+                            ],
+                          ),
+                  ),
+                );
+              }
+              final meeting = visible[index];
+              return MeetingCard(
+                key: ValueKey(meeting.id),
+                meeting: meeting,
+                locked: active != null && active.id != meeting.id,
+                busy: busy,
+                onStart: () => act(meeting, _MeetingAction.start),
+                onPauseResume: () => act(meeting, _MeetingAction.pauseResume),
+                onEnd: () => act(meeting, _MeetingAction.end),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 60, 18, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CustomText(text: formatDate(DateTime.now())),
+            const CustomText(
+              text: 'Meetings',
+              fontSize: 38,
+              fontWeight: FontWeight.w900,
+            ),
+            const SizedBox(height: 10),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                spacing: 10,
+                children: [
+                  Filter(
+                    text: 'Coming meetings',
+                    isSelected: tab == 0,
+                    onTap: () => setState(() => tab = 0),
+                  ),
+                  Filter(
+                    text: 'Previous meetings',
+                    isSelected: tab == 1,
+                    onTap: () => setState(() => tab = 1),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 15),
+            Expanded(child: meetingList()),
+          ],
+        ),
+      ),
+    );
+  }
+}

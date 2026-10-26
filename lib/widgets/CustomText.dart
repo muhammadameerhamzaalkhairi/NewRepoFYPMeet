@@ -1,3 +1,6 @@
+// Preserve the existing widget filename required by the feature spec.
+// ignore_for_file: file_names
+
 import 'package:flutter/material.dart';
 
 class CustomText extends StatelessWidget {
@@ -8,7 +11,15 @@ class CustomText extends StatelessWidget {
   final double? height;
   final TextAlign? textAlign;
 
-  const CustomText({super.key, required this.text, this.fontSize, this.color, this.fontWeight, this.height, this.textAlign});
+  const CustomText({
+    super.key,
+    required this.text,
+    this.fontSize,
+    this.color,
+    this.fontWeight,
+    this.height,
+    this.textAlign,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +30,7 @@ class CustomText extends StatelessWidget {
         color: color,
         fontSize: fontSize,
         fontWeight: fontWeight,
-        height: height
+        height: height,
       ),
     );
   }

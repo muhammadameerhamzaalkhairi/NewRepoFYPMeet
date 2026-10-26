@@ -254,7 +254,7 @@ The screen currently loads a fixed date from `meeting_schedule`. Change it to wo
 - `ListView.builder` inside `Expanded` + `RefreshIndicator` (keep as now).
 - Sorting (D7): `const sortRank = {'running': 0, 'upcoming': 1, 'done': 2, 'skipped': 3};` order by rank, then `group_no`.
 - Filter pills: `All, Running, Upcoming, Done`. Fix the old labels ("Add", "Upcomming"). `selectedFilter` stays one int.
-- **Search (flexible):** lowercase, split the text on spaces. Every word must match at least one of: project, supervisor, any student name, any reg #, any tech, status, or the group number (typing `3` or `group 3` matches group 3). Empty search shows everything.
+- **Search (flexible):** lowercase, split the text on spaces, and require every word to match. A digits-only word of 1–3 digits matches only the exact group number (`3` or `group 3` matches group 3, not group 13 or a reg #). A digits-only word of 4 or more digits matches by substring in reg #, student name, project, supervisor, or tech. Other words match by substring in those fields, status, or `group N`. Empty search shows everything.
 - **Selection:** one `selectedGroup` (tap card to select, tap again to unselect). After a successful Start, select that group.
 - **Expansion (accordion):** replace the `Set<int> expanded` with `int? expandedGroup`. Opening a card closes the previously open one.
 - Expanded content (already built): student name as title, reg # as subtitle, tech chip on the right.

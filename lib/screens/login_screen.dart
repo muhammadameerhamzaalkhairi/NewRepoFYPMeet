@@ -13,9 +13,9 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  TextEditingController email=TextEditingController();
-  TextEditingController password=TextEditingController();
-bool isLoading=false;
+  TextEditingController email = TextEditingController();
+  TextEditingController password = TextEditingController();
+  bool isLoading = false;
 
   @override
   void dispose() {
@@ -23,7 +23,8 @@ bool isLoading=false;
     password.dispose();
     super.dispose();
   }
-final formKey = GlobalKey<FormState>();
+
+  final formKey = GlobalKey<FormState>();
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -37,24 +38,29 @@ final formKey = GlobalKey<FormState>();
               children: [
                 Row(
                   children: [
-                    Image.asset('lib/assets/images/logo.png', height: 56,),
-                    SizedBox(width: 10,),
+                    Image.asset('lib/assets/images/logo.png', height: 56),
+                    SizedBox(width: 10),
                     CustomText(
                       text: 'Live Meet',
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
-                    )
+                    ),
                   ],
                 ),
-                SizedBox(height: 80,),
+                SizedBox(height: 80),
                 CustomText(text: 'Welcome back'),
-                CustomText(text: 'Sign in', fontSize: 48, fontWeight: FontWeight.w900,),
-            
-                SizedBox(height: 20,),
+                CustomText(
+                  text: 'Sign in',
+                  fontSize: 48,
+                  fontWeight: FontWeight.w900,
+                ),
+
+                SizedBox(height: 20),
                 TextBox(
                   hintText: 'Email',
                   controller: email,
-                                    validator: (value){
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Email is required';
                     }
@@ -65,21 +71,22 @@ final formKey = GlobalKey<FormState>();
                     return null;
                   },
                 ),
-                SizedBox(height: 20,),
+                SizedBox(height: 20),
                 TextBox(
                   hintText: 'Password',
                   controller: password,
                   obscureText: true,
-                  validator: (value){
+                  validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Password is required';
                     }
                     return null;
                   },
                 ),
-                SizedBox(height: 20,),
-                  Button(
-                  text: isLoading ? 'Signning in...' : 'Sign in',
+                SizedBox(height: 20),
+                Button(
+                  text: isLoading ? 'Signing in...' : 'Sign in',
+                  enabled: !isLoading,
                   onTap: () async {
                     if (isLoading) return;
 
@@ -94,20 +101,21 @@ final formKey = GlobalKey<FormState>();
                         email: email.text.trim(),
                         password: password.text,
                       );
+                      if (!mounted) return;
 
                       Navigator.pushReplacement(
-                        context,
+                        this.context,
                         MaterialPageRoute(builder: (context) => MainScreen()),
                       );
-                    }
-                    catch(e){
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error: $e')),
-                      );
+                    } catch (e) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(
+                        this.context,
+                      ).showSnackBar(SnackBar(content: Text('Error: $e')));
                       setState(() => isLoading = false);
                     }
                   },
-                )
+                ),
               ],
             ),
           ),
