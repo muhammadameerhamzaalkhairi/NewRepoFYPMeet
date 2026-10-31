@@ -19,8 +19,11 @@ class Livedetailmeetingcard extends StatelessWidget {
   final String? totalText;
   final VoidCallback? onStart;
   final VoidCallback? onEnd;
+  final VoidCallback? onPauseResume;
   final bool canStart;
   final bool canEnd;
+  final bool canPauseResume;
+  final bool isPaused;
   final List<Map<String, dynamic>> students;
 
   const Livedetailmeetingcard({
@@ -38,8 +41,11 @@ class Livedetailmeetingcard extends StatelessWidget {
     this.totalText,
     this.onStart,
     this.onEnd,
+    this.onPauseResume,
     this.canStart = false,
     this.canEnd = false,
+    this.canPauseResume = false,
+    this.isPaused = false,
     this.students = const [],
   });
 
@@ -225,6 +231,7 @@ class Livedetailmeetingcard extends StatelessWidget {
                         Expanded(
                           child: Button(
                             text: 'End',
+                            fontSize: 15,
                             enabled: canEnd,
                             onTap: onEnd,
                           ),
@@ -232,8 +239,17 @@ class Livedetailmeetingcard extends StatelessWidget {
                         Expanded(
                           child: Button(
                             text: 'Start',
+                            fontSize: 15,
                             enabled: canStart,
                             onTap: onStart,
+                          ),
+                        ),
+                        Expanded(
+                          child: Button(
+                            text: isPaused ? 'Resume' : 'Pause',
+                            fontSize: 15,
+                            enabled: canPauseResume,
+                            onTap: onPauseResume,
                           ),
                         ),
                       ],

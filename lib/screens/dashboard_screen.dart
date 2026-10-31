@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:livemeet/models/meeting.dart';
+import 'package:livemeet/screens/login_screen.dart';
 import 'package:livemeet/screens/main_screen.dart';
 import 'package:livemeet/services/meeting_service.dart';
 import 'package:livemeet/utils/time_utils.dart';
@@ -37,7 +38,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     loadMeeting();
     ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && meeting?.status == 'running' && runningGroup != null) {
+      if (mounted && meeting?.status == 'running') {
         setState(() {});
       }
     });
@@ -84,6 +85,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Map<String, dynamic>? get runningGroup =>
       groups.where((row) => row['status'] == 'running').firstOrNull;
+
+  Future<void> logout() async {
+    if (busy) return;
+    setState(() => busy = true);
+    try {
+      final confirmed = await showConfirmDialog(
+        context,
+        title: 'Logout?',
+        message: 'Sign out of Live Meet?',
+      );
+      if (!mounted) return;
+      if (!confirmed) return;
+      widget.onBusyChanged(true);
+      await Supabase.instance.client.auth.signOut();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (_) => false,
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Unable to logout: $e')));
+    } finally {
+      widget.onBusyChanged(false);
+      if (mounted) setState(() => busy = false);
+    }
+  }
 
   Future<void> changeMeeting({required bool end}) async {
     final active = meeting;
@@ -175,6 +210,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget liveCard(Meeting active) {
     final running = runningGroup;
     final started = running?['started_at'] as String?;
+    final meetingStarted = active.startedAt;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -185,23 +221,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CustomText(
-            text: running == null ? 'No group is running' : 'Now running',
-            fontWeight: FontWeight.w600,
+          Row(
+            children: [
+              Expanded(
+                child: CustomText(
+                  text: active.title,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 28,
+                  height: 1,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color.fromARGB(255, 219, 219, 219),
+                  borderRadius: BorderRadius.circular(25),
+                ),
+                child: CustomText(
+                  text: active.status == 'paused' ? 'Paused' : 'Live',
+                  fontSize: 12,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 10),
+          // const CustomText(text: 'Meeting time', fontWeight: FontWeight.w600),
+          // CustomText(
+          //   text: meetingStarted == null
+          //       ? '—'
+          //       : formatClock(
+          //           elapsedSec(
+          //             startedAt: meetingStarted,
+          //             pausedSeconds: active.pausedSeconds,
+          //             frozenAt: active.pausedAt,
+          //           ),
+          //         ),
+          //   fontSize: 28,
+          //   fontWeight: FontWeight.bold,
+          // ),
+          // const SizedBox(height: 15),
           if (running != null) ...[
+            CustomText(
+              text: 'Group ${running['group_no']}',
+              fontWeight: FontWeight.w600,
+            ),
+            const SizedBox(height: 5),
             CustomText(
               text: running['project'] as String,
               fontWeight: FontWeight.bold,
-              fontSize: 28,
+              fontSize: 18,
               height: 1,
             ),
             const SizedBox(height: 10),
-            CustomText(
-              text:
-                  '${running['supervisor']} · Started ${started == null ? '—' : formatTime(DateTime.parse(started))}',
-            ),
             CustomText(
               text: started == null
                   ? '—'
@@ -216,20 +288,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
               fontSize: 28,
               fontWeight: FontWeight.bold,
             ),
-          ] else
+            CustomText(
+              text:
+                  '${running['supervisor']} · Started ${started == null ? '—' : formatTime(DateTime.parse(started))}',
+            ),
+          ] else ...[
+            const CustomText(
+              text: 'No group running',
+              fontWeight: FontWeight.w600,
+            ),
             CustomText(
               text: active.groupsRemaining > 0
                   ? 'Open Live to start the next group'
                   : 'All groups are finished. You can end the meeting.',
             ),
+          ],
           const SizedBox(height: 15),
-          SizedBox(
-            width: 130,
-            height: 50,
-            child: Button(
-              text: 'Open Live',
-              onTap: () => widget.onNavigate(kLive),
-            ),
+          Row(
+            spacing: 10,
+            children: [
+              Expanded(
+                child: Button(
+                  text: 'Open Live',
+                  height: 50,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  onTap: () => widget.onNavigate(kLive),
+                ),
+              ),
+              Expanded(
+                child: Button(
+                  text: 'End meeting',
+                  fontWeight: FontWeight.bold,
+                  height: 50,
+                  fontSize: 14,
+                  enabled: !busy,
+                  onTap: () => changeMeeting(end: true),
+                ),
+              ),
+              Expanded(
+                child: Button(
+                  text: active.status == 'paused' ? 'Resume' : 'Pause',
+                  height: 50,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: Colors.white,
+                  enabled: !busy,
+                  onTap: () => changeMeeting(end: false),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -321,17 +429,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
               CustomText(
                 text: formatDate(active?.meetingDate ?? DateTime.now()),
               ),
-              CustomText(
-                text: !ready
-                    ? 'Home'
-                    : active == null
-                    ? 'No meeting is running'
-                    : active.status == 'paused'
-                    ? 'Meeting is paused'
-                    : 'Meeting is live',
-                fontSize: 38,
-                fontWeight: FontWeight.w900,
-                height: 1,
+              Row(
+                children: [
+                  Expanded(
+                    child: CustomText(
+                      text: !ready
+                          ? 'Home'
+                          : active == null
+                          ? 'No meeting is running'
+                          : active.status == 'paused'
+                          ? 'Meeting is paused'
+                          : 'Meeting is live',
+                      fontSize: 38,
+                      fontWeight: FontWeight.w900,
+                      height: 1,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Logout',
+                    onPressed: busy ? null : logout,
+                    icon: const Icon(Icons.logout),
+                    color: const Color(0xFF111111),
+                  ),
+                //   Button(
+                //     text: 'Log out',
+                //     fontWeight: FontWeight.bold,
+                //     height: 50,
+                //     fontSize: 14,
+                //     enabled: !busy,
+                //     onTap: busy ? null : logout,
+                // ),
+                ],
               ),
               const SizedBox(height: 10),
               if (isLoading)
@@ -381,27 +509,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 //   ],
                 // ),
                 // upNextList(),
-                const SizedBox(height: 10),
-                Row(
-                  spacing: 10,
-                  children: [
-                    Expanded(
-                      child: Button(
-                        text: 'End meeting',
-                        enabled: !busy,
-                        onTap: () => changeMeeting(end: true),
-                      ),
-                    ),
-                    Expanded(
-                      child: Button(
-                        text: active.status == 'paused' ? 'Resume' : 'Pause',
-                        color: Colors.white,
-                        enabled: !busy,
-                        onTap: () => changeMeeting(end: false),
-                      ),
-                    ),
-                  ],
-                ),
               ],
             ],
           ),

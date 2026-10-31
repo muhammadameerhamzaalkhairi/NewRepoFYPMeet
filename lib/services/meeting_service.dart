@@ -72,6 +72,10 @@ class MeetingService {
     await _db.rpc('end_meeting', params: {'p_id': id});
   }
 
+  static Future<void> restartMeeting(int id) async {
+    await _db.rpc('restart_meeting', params: {'p_id': id});
+  }
+
   static Future<void> startGroup(int meetingId, int groupNo) async {
     await _db.rpc(
       'group_start',

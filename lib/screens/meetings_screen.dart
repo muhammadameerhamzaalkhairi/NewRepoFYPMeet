@@ -12,7 +12,7 @@ import 'package:livemeet/widgets/confirm_dialog.dart';
 import 'package:livemeet/widgets/filter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-enum _MeetingAction { start, pauseResume, end }
+enum _MeetingAction { start, pauseResume, end, restart }
 
 class MeetingsScreen extends StatefulWidget {
   final void Function(int) onNavigate;
@@ -83,22 +83,30 @@ class _MeetingsScreenState extends State<MeetingsScreen> {
   Future<void> act(Meeting meeting, _MeetingAction action) async {
     if (busy || isLoading || errorMessage.isNotEmpty) return;
     if (meetings.any((m) => m.isActive && m.id != meeting.id)) return;
-    if (action == _MeetingAction.start
-        ? meeting.status != 'upcoming'
-        : !meeting.isActive) {
-      return;
-    }
+    final allowed = switch (action) {
+      _MeetingAction.start => meeting.status == 'upcoming',
+      _MeetingAction.restart => tab == 1 && meeting.status == 'done',
+      _MeetingAction.pauseResume || _MeetingAction.end => meeting.isActive,
+    };
+    if (!allowed) return;
     setState(() => busy = true);
     try {
       if (action != _MeetingAction.pauseResume) {
         final confirmed = await showConfirmDialog(
           context,
-          title: action == _MeetingAction.start
-              ? 'Start meeting?'
-              : 'End meeting?',
-          message: action == _MeetingAction.start
-              ? '${meeting.title}\n${formatDate(meeting.meetingDate)}'
-              : 'The running group will be finished and groups that were not held will be marked as skipped.',
+          title: switch (action) {
+            _MeetingAction.start => 'Start meeting?',
+            _MeetingAction.restart => 'Restart meeting?',
+            _ => 'End meeting?',
+          },
+          message: switch (action) {
+            _MeetingAction.start =>
+              '${meeting.title}\n${formatDate(meeting.meetingDate)}',
+            _MeetingAction.restart =>
+              'All group progress for "${meeting.title}" will be reset. This meeting will go back to Coming meetings.',
+            _ =>
+              'The running group will be finished and groups that were not held will be marked as skipped.',
+          },
         );
         if (!mounted) return;
         if (!confirmed) return;
@@ -115,6 +123,8 @@ class _MeetingsScreenState extends State<MeetingsScreen> {
           }
         case _MeetingAction.end:
           await MeetingService.endMeeting(meeting.id);
+        case _MeetingAction.restart:
+          await MeetingService.restartMeeting(meeting.id);
       }
       if (!mounted) return;
       await loadMeetings();
@@ -211,6 +221,9 @@ class _MeetingsScreenState extends State<MeetingsScreen> {
                 onStart: () => act(meeting, _MeetingAction.start),
                 onPauseResume: () => act(meeting, _MeetingAction.pauseResume),
                 onEnd: () => act(meeting, _MeetingAction.end),
+                onRestart: tab == 1
+                    ? () => act(meeting, _MeetingAction.restart)
+                    : null,
               );
             },
           ),

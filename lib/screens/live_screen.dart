@@ -13,6 +13,8 @@ import 'package:livemeet/widgets/confirm_dialog.dart';
 import 'package:livemeet/widgets/filter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+enum _GroupAction { start, end, pauseResume }
+
 class LiveScreen extends StatefulWidget {
   final void Function(int) onNavigate;
   final ValueChanged<bool> onBusyChanged;
@@ -137,6 +139,13 @@ class _LiveScreenState extends State<LiveScreen> {
       meeting?.status == 'running' &&
       row['status'] == 'running';
 
+  bool canPauseResume(Map<String, dynamic> row) =>
+      !busy &&
+      !isLoading &&
+      errorMessage.isEmpty &&
+      meeting?.isActive == true &&
+      row['status'] == 'running';
+
   String? groupTimer(Map<String, dynamic> row) {
     if (row['status'] != 'running' || row['started_at'] == null) return null;
     return formatClock(
@@ -148,31 +157,45 @@ class _LiveScreenState extends State<LiveScreen> {
     );
   }
 
-  Future<void> changeGroup(int number, {required bool start}) async {
+  Future<void> changeGroup(int number, _GroupAction action) async {
     final active = meeting;
     final row = groups[number]?.first;
-    if (active == null || row == null || !(start ? canStart(row) : canEnd(row))) {
-      return;
-    }
+    if (active == null || row == null) return;
+    final allowed = switch (action) {
+      _GroupAction.start => canStart(row),
+      _GroupAction.end => canEnd(row),
+      _GroupAction.pauseResume => canPauseResume(row),
+    };
+    if (!allowed) return;
     setState(() => busy = true);
     try {
-      final confirmed = await showConfirmDialog(
-        context,
-        title: '${start ? 'Start' : 'End'} group $number?',
-        message: start
-            ? row['project'] as String
-            : 'Elapsed time: ${groupTimer(row) ?? '—'}',
-      );
-      if (!mounted) return;
-      if (!confirmed) return;
+      if (action != _GroupAction.pauseResume) {
+        final confirmed = await showConfirmDialog(
+          context,
+          title:
+              '${action == _GroupAction.start ? 'Start' : 'End'} group $number?',
+          message: action == _GroupAction.start
+              ? row['project'] as String
+              : 'Elapsed time: ${groupTimer(row) ?? '—'}',
+        );
+        if (!mounted) return;
+        if (!confirmed) return;
+      }
       widget.onBusyChanged(true);
-      if (start) {
-        await MeetingService.startGroup(active.id, number);
-      } else {
-        await MeetingService.endGroup(active.id, number);
+      switch (action) {
+        case _GroupAction.start:
+          await MeetingService.startGroup(active.id, number);
+        case _GroupAction.end:
+          await MeetingService.endGroup(active.id, number);
+        case _GroupAction.pauseResume:
+          if (active.status == 'paused') {
+            await MeetingService.resumeMeeting(active.id);
+          } else {
+            await MeetingService.pauseMeeting(active.id);
+          }
       }
       if (!mounted) return;
-      if (start) setState(() => selectedGroup = number);
+      if (action == _GroupAction.start) setState(() => selectedGroup = number);
       await loadMeeting();
       if (!mounted) return;
     } on PostgrestException catch (e) {
@@ -323,8 +346,12 @@ class _LiveScreenState extends State<LiveScreen> {
               ),
               canStart: canStart(row),
               canEnd: canEnd(row),
-              onStart: () => changeGroup(number, start: true),
-              onEnd: () => changeGroup(number, start: false),
+              canPauseResume: canPauseResume(row),
+              isPaused: meeting!.status == 'paused',
+              onStart: () => changeGroup(number, _GroupAction.start),
+              onEnd: () => changeGroup(number, _GroupAction.end),
+              onPauseResume: () =>
+                  changeGroup(number, _GroupAction.pauseResume),
             );
           },
         ),

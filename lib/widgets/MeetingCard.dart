@@ -14,6 +14,7 @@ class MeetingCard extends StatelessWidget {
   final VoidCallback onStart;
   final VoidCallback onPauseResume;
   final VoidCallback onEnd;
+  final VoidCallback? onRestart;
 
   const MeetingCard({
     super.key,
@@ -23,6 +24,7 @@ class MeetingCard extends StatelessWidget {
     required this.onStart,
     required this.onPauseResume,
     required this.onEnd,
+    this.onRestart,
   });
 
   Widget chip(String text) => Container(
@@ -118,6 +120,16 @@ class MeetingCard extends StatelessWidget {
                 text:
                     'Done ${meeting.groupsDone} · Skipped ${meeting.groupsSkipped}',
               ),
+              if (onRestart != null) ...[
+                const SizedBox(height: 10),
+                Button(
+                  text: 'Restart',
+                  height: 48,
+                  fontSize: 15,
+                  enabled: enabled,
+                  onTap: onRestart,
+                ),
+              ],
             ],
             if (meeting.status != 'done') ...[
               const SizedBox(height: 10),
